@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -25,13 +25,15 @@ package org.pentaho.di.core;
 import java.math.BigDecimal;
 import java.util.Date;
 
+import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.injection.InjectionTypeConverter;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.core.row.ValueMeta;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.value.ValueMetaNone;
 import org.pentaho.di.repository.LongObjectId;
 import org.pentaho.di.repository.ObjectId;
 
@@ -134,7 +136,13 @@ public class RowMetaAndData implements Cloneable {
   }
 
   public void addValue( String valueName, int valueType, Object valueData ) {
-    addValue( new ValueMeta( valueName, valueType ), valueData );
+    ValueMetaInterface v;
+    try {
+      v = ValueMetaFactory.createValueMeta( valueName, valueType );
+    } catch ( KettlePluginException e ) {
+      v = new ValueMetaNone( valueName );
+    }
+    addValue( v, valueData );
   }
 
   public void clear() {
@@ -304,6 +312,32 @@ public class RowMetaAndData implements Cloneable {
   }
 
   /**
+   * Converts string value into specified type. Used for constant injection.
+   */
+  public static Object getStringAsJavaType( String vs, Class<?> destinationType, InjectionTypeConverter converter )
+    throws KettleValueException {
+    if ( String.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2string( vs );
+    } else if ( int.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2intPrimitive( vs );
+    } else if ( Integer.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2integer( vs );
+    } else if ( long.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2longPrimitive( vs );
+    } else if ( Long.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2long( vs );
+    } else if ( boolean.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2booleanPrimitive( vs );
+    } else if ( Boolean.class.isAssignableFrom( destinationType ) ) {
+      return converter.string2boolean( vs );
+    } else if ( destinationType.isEnum() ) {
+      return converter.string2enum( destinationType, vs );
+    } else {
+      throw new RuntimeException( "Wrong value conversion to " + destinationType );
+    }
+  }
+
+  /**
    * Returns value as specified java type using converter. Used for metadata injection.
    */
   public Object getAsJavaType( String valueName, Class<?> destinationType, InjectionTypeConverter converter )
@@ -318,25 +352,7 @@ public class RowMetaAndData implements Cloneable {
     switch ( metaType.getType() ) {
       case ValueMetaInterface.TYPE_STRING:
         String vs = rowMeta.getString( data, idx );
-        if ( String.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2string( vs );
-        } else if ( int.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2intPrimitive( vs );
-        } else if ( Integer.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2integer( vs );
-        } else if ( long.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2longPrimitive( vs );
-        } else if ( Long.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2long( vs );
-        } else if ( boolean.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2booleanPrimitive( vs );
-        } else if ( Boolean.class.isAssignableFrom( destinationType ) ) {
-          return converter.string2boolean( vs );
-        } else if ( destinationType.isEnum() ) {
-          return converter.string2enum( destinationType, vs );
-        } else {
-          throw new RuntimeException( "Wrong value conversion to " + destinationType );
-        }
+        return getStringAsJavaType( vs, destinationType, converter );
       case ValueMetaInterface.TYPE_BOOLEAN:
         Boolean vb = rowMeta.getBoolean( data, idx );
         if ( String.class.isAssignableFrom( destinationType ) ) {

@@ -1,33 +1,26 @@
 <?xml version="1.0"?>
-<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.pentaho</groupId>
-    <artifactId>pentaho-ce-jar-parent-pom</artifactId>
-    <version>1.2.1</version>
+    <groupId>pentaho-kettle</groupId>
+    <artifactId>plugins</artifactId>
+    <version>8.0-SNAPSHOT</version>
   </parent>
+  <groupId>org.pentaho</groupId>
   <artifactId>meta-inject-plugin</artifactId>
-  <version>7.0-SNAPSHOT</version>
+  <version>8.0-SNAPSHOT</version>
   <packaging>bundle</packaging>
   <name>meta-inject-plugin</name>
   <description>Metadata Injection as an OSGi Plugin</description>
   <url>http://www.pentaho.com</url>
-  <licenses>
-    <license>
-      <name>Pentaho Proprietary License</name>
-      <url>http://www.pentaho.com</url>
-      <distribution>repo</distribution>
-    </license>
-  </licenses>
   <properties>
     <servlet-api.version>2.3</servlet-api.version>
     <mockito.version>1.9.5</mockito.version>
-    <dependency.pentaho-kettle.version>7.0-SNAPSHOT</dependency.pentaho-kettle.version>
+    <dependency.pentaho-kettle.version>8.0-SNAPSHOT</dependency.pentaho-kettle.version>
     <guava.version>17.0</guava.version>
     <jface.version>3.3.0-I20070606-0010</jface.version>
-    <swt.version>4.3.2</swt.version>
+    <swt.version>4.6</swt.version>
   </properties>
   <dependencies>
     <dependency>
@@ -56,7 +49,7 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.swt</groupId>
-      <artifactId>swt-linux-x86_64</artifactId>
+      <artifactId>org.eclipse.swt.gtk.linux.x86_64</artifactId>
       <version>${swt.version}</version>
       <scope>compile</scope>
       <exclusions>
@@ -127,17 +120,16 @@
     <dependency>
       <groupId>org.apache.xmlgraphics</groupId>
       <artifactId>batik-js</artifactId>
-      <version>1.7</version>
+      <version>1.8</version>
       <exclusions>
         <exclusion>
-          <groupId>org.apache.xmlgraphics</groupId>
           <artifactId>batik-js</artifactId>
+          <groupId>org.apache.xmlgraphics</groupId>
         </exclusion>
       </exclusions>
     </dependency>
   </dependencies>
   <build>
-    <finalName>${project.artifactId}-${project.version}</finalName>
     <plugins>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -157,13 +149,6 @@
             <packageLineRate>90</packageLineRate>
             <packageBranchRate>80</packageBranchRate>
           </check>
-        </configuration>
-      </plugin>
-      <plugin>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <configuration>
-          <source>1.7</source>
-          <target>1.7</target>
         </configuration>
       </plugin>
       <plugin>

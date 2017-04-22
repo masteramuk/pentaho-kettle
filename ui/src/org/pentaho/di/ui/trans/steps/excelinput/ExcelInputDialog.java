@@ -3,7 +3,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -58,15 +58,16 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.pentaho.di.core.Const;
+import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Props;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.fileinput.FileInputList;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.core.row.ValueMeta;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.spreadsheet.KCell;
 import org.pentaho.di.core.spreadsheet.KCellType;
 import org.pentaho.di.core.spreadsheet.KSheet;
@@ -949,7 +950,7 @@ public class ExcelInputDialog extends BaseStepDialog implements StepDialogInterf
           false ),
         new ColumnInfo(
           BaseMessages.getString( PKG, "ExcelInputDialog.TrimType.Column" ), ColumnInfo.COLUMN_TYPE_CCOMBO,
-          ValueMeta.trimTypeDesc ),
+          ValueMetaString.trimTypeDesc ),
         new ColumnInfo(
           BaseMessages.getString( PKG, "ExcelInputDialog.Repeat.Column" ), ColumnInfo.COLUMN_TYPE_CCOMBO,
           new String[] {
@@ -1972,88 +1973,7 @@ public class ExcelInputDialog extends BaseStepDialog implements StepDialogInterf
         KWorkbook workbook =
           WorkbookFactory.getWorkbook( info.getSpreadSheetType(), KettleVFS.getFilename( file ), info
             .getEncoding() );
-
-        int nrSheets = workbook.getNumberOfSheets();
-        for ( int j = 0; j < nrSheets; j++ ) {
-          KSheet sheet = workbook.getSheet( j );
-
-          // See if it's a selected sheet:
-          int sheetIndex;
-          if ( info.readAllSheets() ) {
-            sheetIndex = 0;
-          } else {
-            sheetIndex = Const.indexOfString( sheet.getName(), info.getSheetName() );
-          }
-          if ( sheetIndex >= 0 ) {
-            // We suppose it's the complete range we're looking for...
-            //
-            int rownr = 0;
-            int startcol = 0;
-
-            if ( info.readAllSheets() ) {
-              if ( info.getStartColumn().length == 1 ) {
-                startcol = info.getStartColumn()[0];
-              }
-              if ( info.getStartRow().length == 1 ) {
-                rownr = info.getStartRow()[0];
-              }
-            } else {
-              rownr = info.getStartRow()[sheetIndex];
-              startcol = info.getStartColumn()[sheetIndex];
-            }
-
-            boolean stop = false;
-            for ( int colnr = startcol; colnr < 256 && !stop; colnr++ ) {
-              try {
-                String fieldname = null;
-                int fieldtype = ValueMetaInterface.TYPE_NONE;
-
-                KCell cell = sheet.getCell( colnr, rownr );
-                if ( cell == null ) {
-                  stop = true;
-                } else {
-                  if ( cell.getType() != KCellType.EMPTY ) {
-                    // We found a field.
-                    fieldname = cell.getContents();
-                  }
-
-                  // System.out.println("Fieldname = "+fieldname);
-
-                  KCell below = sheet.getCell( colnr, rownr + 1 );
-
-                  if ( below != null ) {
-                    if ( below.getType() == KCellType.BOOLEAN ) {
-                      fieldtype = ValueMetaInterface.TYPE_BOOLEAN;
-                    } else if ( below.getType() == KCellType.DATE ) {
-                      fieldtype = ValueMetaInterface.TYPE_DATE;
-                    } else if ( below.getType() == KCellType.LABEL ) {
-                      fieldtype = ValueMetaInterface.TYPE_STRING;
-                    } else if ( below.getType() == KCellType.NUMBER ) {
-                      fieldtype = ValueMetaInterface.TYPE_NUMBER;
-                    } else {
-                      fieldtype = ValueMetaInterface.TYPE_STRING;
-                    }
-                  } else {
-                    fieldtype = ValueMetaInterface.TYPE_STRING;
-                  }
-
-                  if ( Utils.isEmpty( fieldname ) ) {
-                    stop = true;
-                  } else {
-                    if ( fieldtype != ValueMetaInterface.TYPE_NONE ) {
-                      ValueMetaInterface field = ValueMetaFactory.createValueMeta( fieldname, fieldtype );
-                      fields.addValueMeta( field );
-                    }
-                  }
-                }
-              } catch ( ArrayIndexOutOfBoundsException aioobe ) {
-                // System.out.println("index out of bounds at column "+colnr+" : "+aioobe.toString());
-                stop = true;
-              }
-            }
-          }
-        }
-
+        processingWorkbook( fields, info, workbook );
         workbook.close();
       } catch ( Exception e ) {
         new ErrorDialog( shell, BaseMessages.getString( PKG, "System.Dialog.Error.Title" ), BaseMessages
@@ -2080,6 +2000,97 @@ public class ExcelInputDialog extends BaseStepDialog implements StepDialogInterf
       mb.open();
     }
     checkAlerts();
+  }
+
+  /**
+   * Processing excel workbook, filling fields
+   *
+   * @param fields RowMetaInterface for filling fields
+   * @param info ExcelInputMeta
+   * @param workbook excel workbook for processing
+   * @throws KettlePluginException
+   */
+  private void processingWorkbook( RowMetaInterface fields, ExcelInputMeta info, KWorkbook workbook ) throws KettlePluginException {
+    int nrSheets = workbook.getNumberOfSheets();
+    for ( int j = 0; j < nrSheets; j++ ) {
+      KSheet sheet = workbook.getSheet( j );
+
+      // See if it's a selected sheet:
+      int sheetIndex;
+      if ( info.readAllSheets() ) {
+        sheetIndex = 0;
+      } else {
+        sheetIndex = Const.indexOfString( sheet.getName(), info.getSheetName() );
+      }
+      if ( sheetIndex >= 0 ) {
+        // We suppose it's the complete range we're looking for...
+        //
+        int rownr = 0;
+        int startcol = 0;
+
+        if ( info.readAllSheets() ) {
+          if ( info.getStartColumn().length == 1 ) {
+            startcol = info.getStartColumn()[0];
+          }
+          if ( info.getStartRow().length == 1 ) {
+            rownr = info.getStartRow()[0];
+          }
+        } else {
+          rownr = info.getStartRow()[sheetIndex];
+          startcol = info.getStartColumn()[sheetIndex];
+        }
+
+        boolean stop = false;
+        for ( int colnr = startcol; !stop; colnr++ ) {
+          try {
+            String fieldname = null;
+            int fieldtype = ValueMetaInterface.TYPE_NONE;
+
+            KCell cell = sheet.getCell( colnr, rownr );
+            if ( cell == null ) {
+              stop = true;
+            } else {
+              if ( cell.getType() != KCellType.EMPTY ) {
+                // We found a field.
+                fieldname = cell.getContents();
+              }
+
+              // System.out.println("Fieldname = "+fieldname);
+
+              KCell below = sheet.getCell( colnr, rownr + 1 );
+
+              if ( below != null ) {
+                if ( below.getType() == KCellType.BOOLEAN ) {
+                  fieldtype = ValueMetaInterface.TYPE_BOOLEAN;
+                } else if ( below.getType() == KCellType.DATE ) {
+                  fieldtype = ValueMetaInterface.TYPE_DATE;
+                } else if ( below.getType() == KCellType.LABEL ) {
+                  fieldtype = ValueMetaInterface.TYPE_STRING;
+                } else if ( below.getType() == KCellType.NUMBER ) {
+                  fieldtype = ValueMetaInterface.TYPE_NUMBER;
+                } else {
+                  fieldtype = ValueMetaInterface.TYPE_STRING;
+                }
+              } else {
+                fieldtype = ValueMetaInterface.TYPE_STRING;
+              }
+
+              if ( Utils.isEmpty( fieldname ) ) {
+                stop = true;
+              } else {
+                if ( fieldtype != ValueMetaInterface.TYPE_NONE ) {
+                  ValueMetaInterface field = ValueMetaFactory.createValueMeta( fieldname, fieldtype );
+                  fields.addValueMeta( field );
+                }
+              }
+            }
+          } catch ( ArrayIndexOutOfBoundsException aioobe ) {
+            // System.out.println("index out of bounds at column "+colnr+" : "+aioobe.toString());
+            stop = true;
+          }
+        }
+      }
+    }
   }
 
   private void showFiles() {

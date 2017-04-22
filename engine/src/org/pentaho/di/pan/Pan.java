@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -22,6 +22,7 @@
 
 package org.pentaho.di.pan;
 
+import java.io.File;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ import org.pentaho.di.core.parameters.UnknownParamException;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.plugins.RepositoryPluginType;
 import org.pentaho.di.core.xml.XMLHandler;
+import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.kitchen.Kitchen;
 import org.pentaho.di.metastore.MetaStoreConst;
@@ -88,7 +90,7 @@ public class Pan {
     StringBuilder optionRepname, optionUsername, optionPassword, optionTransname, optionDirname;
     StringBuilder optionFilename, optionLoglevel, optionLogfile, optionLogfileOld, optionListdir;
     StringBuilder optionListtrans, optionListrep, optionExprep, optionNorep, optionSafemode;
-    StringBuilder optionVersion, optionJarFilename, optionListParam, optionMetrics;
+    StringBuilder optionVersion, optionJarFilename, optionListParam, optionMetrics, initialDir;
 
     NamedParams optionParams = new NamedParamsDefault();
 
@@ -155,10 +157,13 @@ public class Pan {
           "listparam", BaseMessages.getString( PKG, "Pan.ComdLine.ListParam" ), optionListParam =
           new StringBuilder(), true, false ),
         new CommandLineOption(
+          "initialDir", null, initialDir =
+          new StringBuilder(), false, true ),
+        new CommandLineOption(
           "metrics", BaseMessages.getString( PKG, "Pan.ComdLine.Metrics" ), optionMetrics =
           new StringBuilder(), true, false ), maxLogLinesOption, maxLogTimeoutOption };
 
-    if ( args.size() == 0 ) {
+    if ( args.size() == 2 ) { // 2 internal hidden argument (flag and value)
       CommandLineOption.printUsage( options );
       exitJVM( 9 );
     }
@@ -377,10 +382,19 @@ public class Pan {
         // You could implement some fail-over mechanism this way.
         //
         if ( trans == null && !Utils.isEmpty( optionFilename ) ) {
-          if ( log.isDetailed() ) {
-            log.logDetailed( BaseMessages.getString( PKG, "Pan.Log.LoadingTransXML", "" + optionFilename ) );
+
+          String fileName = optionFilename.toString();
+          // If the filename starts with scheme like zip:, then isAbsolute() will return false even though the
+          // the path following the zip is absolute path. Check for isAbsolute only if the fileName does not
+          // start with scheme
+          if ( !KettleVFS.startsWithScheme( fileName ) && !new File( fileName ).isAbsolute() ) {
+            fileName = initialDir.toString() + fileName;
           }
-          transMeta = new TransMeta( optionFilename.toString() );
+
+          if ( log.isDetailed() ) {
+            log.logDetailed( BaseMessages.getString( PKG, "Pan.Log.LoadingTransXML", "" + fileName ) );
+          }
+          transMeta = new TransMeta( fileName );
           trans = new Trans( transMeta );
         }
 

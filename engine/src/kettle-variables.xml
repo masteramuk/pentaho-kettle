@@ -183,6 +183,18 @@
   </kettle-variable>
 
   <kettle-variable>
+    <description>The kettle log tab refresh delay.</description>
+    <variable>KETTLE_LOG_TAB_REFRESH_DELAY</variable>
+    <default-value>1000</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>The kettle log tab refresh period.</description>
+    <variable>KETTLE_LOG_TAB_REFRESH_PERIOD</variable>
+    <default-value>1000</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
     <description>A comma delimited list of classes to scan for plugin annotations</description>
     <variable>KETTLE_PLUGIN_CLASSES</variable>
     <default-value/>
@@ -429,6 +441,12 @@
   <kettle-variable>
     <description>Set this variable to false to preserve enclosure symbol after splitting the string in the Split fields step. Changing it to true will remove first and last enclosure symbol from the resulting string chunks.</description>
     <variable>KETTLE_SPLIT_FIELDS_REMOVE_ENCLOSURE</variable>
+    <default-value>false</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to false to preserve global log variables defined in transformation / job Properties -> Log panel. Changing it to true will clear it when export transformation / job.</description>
+    <variable>KETTLE_GLOBAL_LOG_VARIABLES_CLEAR_ON_EXPORT</variable>
     <default-value>false</default-value>
   </kettle-variable>
 

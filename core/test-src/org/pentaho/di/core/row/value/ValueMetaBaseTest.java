@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -21,30 +21,6 @@
  ******************************************************************************/
 package org.pentaho.di.core.row.value;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.math.BigDecimal;
-import java.net.InetAddress;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.List;
-import java.util.TimeZone;
-
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
 import org.junit.After;
@@ -53,8 +29,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
-import org.owasp.esapi.ESAPI;
-import org.owasp.esapi.Encoder;
+import org.owasp.encoder.Encode;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.database.DatabaseInterface;
 import org.pentaho.di.core.database.DatabaseMeta;
@@ -72,7 +47,34 @@ import org.pentaho.di.core.logging.LoggingRegistry;
 import org.pentaho.di.core.plugins.DatabasePluginType;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.math.BigDecimal;
+import java.net.InetAddress;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.List;
+import java.util.TimeZone;
+
+import static org.junit.Assert.*;
 
 public class ValueMetaBaseTest {
 
@@ -172,20 +174,18 @@ public class ValueMetaBaseTest {
 
   @Test
   public void testGetDataXML() throws IOException {
-    Encoder encoder = ESAPI.encoder();
-
     BigDecimal bigDecimal = BigDecimal.ONE;
     ValueMetaBase valueDoubleMetaBase =
       new ValueMetaBase( String.valueOf( bigDecimal ), ValueMetaInterface.TYPE_BIGNUMBER );
     assertEquals(
-      "<value-data>" + encoder.encodeForXML( String.valueOf( bigDecimal ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+      "<value-data>" + Encode.forXml( String.valueOf( bigDecimal ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       valueDoubleMetaBase.getDataXML( bigDecimal ) );
 
     boolean valueBoolean = Boolean.TRUE;
     ValueMetaBase valueBooleanMetaBase =
       new ValueMetaBase( String.valueOf( valueBoolean ), ValueMetaInterface.TYPE_BOOLEAN );
     assertEquals(
-      "<value-data>" + encoder.encodeForXML( String.valueOf( valueBoolean ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+      "<value-data>" + Encode.forXml( String.valueOf( valueBoolean ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       valueBooleanMetaBase.getDataXML( valueBoolean ) );
 
     Date date = new Date( 0 );
@@ -193,31 +193,39 @@ public class ValueMetaBaseTest {
       new ValueMetaBase( date.toString(), ValueMetaInterface.TYPE_DATE );
     SimpleDateFormat formaterData = new SimpleDateFormat( ValueMetaBase.DEFAULT_DATE_FORMAT_MASK );
     assertEquals(
-      "<value-data>" + encoder.encodeForXML( formaterData.format( date ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+      "<value-data>" + Encode.forXml( formaterData.format( date ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       dateMetaBase.getDataXML( date ) );
 
     InetAddress inetAddress = InetAddress.getByName( "127.0.0.1" );
     ValueMetaBase inetAddressMetaBase =
       new ValueMetaBase( inetAddress.toString(), ValueMetaInterface.TYPE_INET );
-    assertEquals( "<value-data>" + encoder.encodeForXML( inetAddress.toString() ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+    assertEquals( "<value-data>" + Encode.forXml( inetAddress.toString() ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       inetAddressMetaBase.getDataXML( inetAddress ) );
 
     long value = Long.MAX_VALUE;
     ValueMetaBase integerMetaBase = new ValueMetaBase( String.valueOf( value ), ValueMetaInterface.TYPE_INTEGER );
-    assertEquals( "<value-data>" + encoder.encodeForXML( String.valueOf( value ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+    assertEquals( "<value-data>" + Encode.forXml( String.valueOf( value ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       integerMetaBase.getDataXML( value ) );
 
     String stringValue = "TEST_STRING";
     ValueMetaBase valueMetaBase = new ValueMetaString( stringValue );
-    assertEquals( "<value-data>" + encoder.encodeForXML( stringValue ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+    assertEquals( "<value-data>" + Encode.forXml( stringValue ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       valueMetaBase.getDataXML( stringValue ) );
 
     Timestamp timestamp = new Timestamp( 0 );
     ValueMetaBase valueMetaBaseTimeStamp = new ValueMetaBase( timestamp.toString(), ValueMetaInterface.TYPE_TIMESTAMP );
     SimpleDateFormat formater = new SimpleDateFormat( ValueMetaBase.DEFAULT_TIMESTAMP_FORMAT_MASK );
     assertEquals(
-      "<value-data>" + encoder.encodeForXML( formater.format( timestamp ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
+      "<value-data>" + Encode.forXml( formater.format( timestamp ) ) + "</value-data>" + SystemUtils.LINE_SEPARATOR,
       valueMetaBaseTimeStamp.getDataXML( timestamp ) );
+
+    byte[] byteTestValues = { 0, 1, 2, 3 };
+    ValueMetaBase valueMetaBaseByteArray = new ValueMetaBase( byteTestValues.toString(), ValueMetaInterface.TYPE_STRING );
+    valueMetaBaseByteArray.setStorageType( ValueMetaInterface.STORAGE_TYPE_BINARY_STRING );
+    assertEquals(
+      "<value-data><binary-string>" + Encode.forXml( XMLHandler.encodeBinaryData( byteTestValues ) )
+        + "</binary-string>" + Const.CR + "</value-data>",
+      valueMetaBaseByteArray.getDataXML( byteTestValues ) );
   }
 
   @Test
@@ -382,6 +390,24 @@ public class ValueMetaBaseTest {
     valueMetaBase.convertDataFromString( inputValueEmptyString, valueMetaInterface, nullIf, ifNull, trim_type );
   }
 
+  @Test( expected = KettleValueException.class )
+  public void testGetBigDecimalThrowsKettleValueException() throws KettleValueException {
+    ValueMetaBase valueMeta = new ValueMetaBigNumber();
+    valueMeta.getBigNumber( "1234567890" );
+  }
+
+  @Test( expected = KettleValueException.class )
+  public void testGetIntegerThrowsKettleValueException() throws KettleValueException {
+    ValueMetaBase valueMeta = new ValueMetaInteger();
+    valueMeta.getInteger( "1234567890" );
+  }
+
+  @Test( expected = KettleValueException.class )
+  public void testGetNumberThrowsKettleValueException() throws KettleValueException {
+    ValueMetaBase valueMeta = new ValueMetaNumber();
+    valueMeta.getNumber( "1234567890" );
+  }
+
   @Test
   public void testIsNumeric() {
     int[] numTypes = { ValueMetaInterface.TYPE_INTEGER, ValueMetaInterface.TYPE_NUMBER, ValueMetaInterface.TYPE_BIGNUMBER };
@@ -518,6 +544,12 @@ public class ValueMetaBaseTest {
     assertEquals( -1, intMeta.compare( int2, int1 ) );
     assertEquals( 0, intMeta.compare( int1, int1 ) );
 
+    int1 = null;
+    int2 = new Long( 6223372036854775804L );
+    assertEquals( -1, intMeta.compare( int1, int2 ) );
+    intMeta.setSortedDescending( true );
+    assertEquals( 1, intMeta.compare( int1, int2 ) );
+
   }
 
   @Test
@@ -549,6 +581,16 @@ public class ValueMetaBaseTest {
     assertEquals( local( 1918, 3, 25, 0, 0, 0, 0 ), dateMeta.convertStringToDate( "1918-03-25" ) );
     // convert date with spaces at the end
     assertEquals( local( 1918, 3, 25, 0, 0, 0, 0 ), dateMeta.convertStringToDate( "1918-03-25  \n" ) );
+  }
+
+  @Test
+  public void testDateToStringParse() throws Exception {
+    ValueMetaBase dateMeta = new ValueMetaString( "date" );
+    dateMeta.setDateFormatLenient( false );
+
+    // try to convert date by 'start-of-date' make - old behavior
+    dateMeta.setConversionMask( "yyyy-MM-dd" );
+    assertEquals( local( 1918, 3, 25, 0, 0, 0, 0 ), dateMeta.convertStringToDate( "1918-03-25T07:40:03.012+03:00" ) );
   }
 
   @Test
@@ -624,6 +666,105 @@ public class ValueMetaBaseTest {
     }
   }
 
+  @Test
+  public void testConvertDataUsingConversionMetaDataForCustomMeta() {
+    ValueMetaBase baseMeta = new ValueMetaBase( "CUSTOM_VALUEMETA_STRING", ValueMetaInterface.TYPE_STRING );
+    baseMeta.setConversionMetadata( new ValueMetaBase( "CUSTOM", 999 ) );
+    Object customData = new Object();
+    try {
+      baseMeta.convertDataUsingConversionMetaData( customData );
+      Assert.fail( "Should have thrown a Kettle Value Exception with a proper message. Not a NPE stack trace" );
+    } catch ( KettleValueException e ) {
+      String expectedMessage = "CUSTOM_VALUEMETA_STRING String : I can't convert the specified value to data type : 999";
+      assertEquals( expectedMessage, e.getMessage().trim() );
+    }
+  }
+
+  @Test
+  public void testConvertDataUsingConversionMetaData() throws KettleValueException, ParseException {
+    ValueMetaString base = new ValueMetaString();
+    double DELTA = 1e-15;
+
+    base.setConversionMetadata( new ValueMetaString( "STRING" ) );
+    Object defaultStringData = "STRING DATA";
+    String convertedStringData = (String) base.convertDataUsingConversionMetaData( defaultStringData );
+    assertEquals( "STRING DATA", convertedStringData );
+
+    base.setConversionMetadata( new ValueMetaInteger( "INTEGER" ) );
+    Object defaultIntegerData = "1";
+    long convertedIntegerData = (long) base.convertDataUsingConversionMetaData( defaultIntegerData );
+    assertEquals( 1, convertedIntegerData );
+
+
+    base.setConversionMetadata( new ValueMetaNumber( "NUMBER" ) );
+    Object defaultNumberData = "1.999";
+    double convertedNumberData = (double) base.convertDataUsingConversionMetaData( defaultNumberData );
+    assertEquals( 1.999, convertedNumberData, DELTA );
+
+    ValueMetaInterface dateConversionMeta = new ValueMetaDate( "DATE" );
+    dateConversionMeta.setDateFormatTimeZone( TimeZone.getTimeZone( "CST" ) );
+    base.setConversionMetadata( dateConversionMeta );
+    Object defaultDateData = "1990/02/18 00:00:00.000";
+    Date date1 = new Date( 635320800000L );
+    Date convertedDateData = (Date) base.convertDataUsingConversionMetaData( defaultDateData );
+    assertEquals( date1, convertedDateData );
+
+    base.setConversionMetadata( new ValueMetaBigNumber( "BIG_NUMBER" ) );
+    Object defaultBigNumber = String.valueOf( BigDecimal.ONE );
+    BigDecimal convertedBigNumber = (BigDecimal) base.convertDataUsingConversionMetaData( defaultBigNumber );
+    assertEquals( BigDecimal.ONE, convertedBigNumber );
+
+    base.setConversionMetadata( new ValueMetaBoolean( "BOOLEAN" ) );
+    Object defaultBoolean = "true";
+    boolean convertedBoolean = (boolean) base.convertDataUsingConversionMetaData( defaultBoolean );
+    assertEquals( true, convertedBoolean );
+  }
+
+  @Test
+  public void testGetCompatibleString() throws KettleValueException {
+    ValueMetaInteger valueMetaInteger = new ValueMetaInteger( "INTEGER" );
+    valueMetaInteger.setType( 5 ); // Integer
+    valueMetaInteger.setStorageType( 1 ); // STORAGE_TYPE_BINARY_STRING
+
+    assertEquals( "2", valueMetaInteger.getCompatibleString( new Long( 2 ) ) ); //BACKLOG-15750
+  }
+
+  @Test
+  public void testReadDataInet() throws Exception {
+    InetAddress localhost = InetAddress.getByName( "127.0.0.1" );
+    byte[] address = localhost.getAddress();
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    DataOutputStream dataOutputStream = new DataOutputStream( byteArrayOutputStream );
+    dataOutputStream.writeBoolean( false );
+    dataOutputStream.writeInt( address.length );
+    dataOutputStream.write( address );
+
+    DataInputStream dis = new DataInputStream( new ByteArrayInputStream( byteArrayOutputStream.toByteArray() ) );
+    ValueMetaBase vm = new ValueMetaInternetAddress();
+    assertEquals( localhost, vm.readData( dis ) );
+  }
+
+  @Test
+  public void testWriteDataInet() throws Exception {
+    InetAddress localhost = InetAddress.getByName( "127.0.0.1" );
+    byte[] address = localhost.getAddress();
+
+    ByteArrayOutputStream out1 = new ByteArrayOutputStream();
+    DataOutputStream dos1 = new DataOutputStream( out1 );
+    dos1.writeBoolean( false );
+    dos1.writeInt( address.length );
+    dos1.write( address );
+    byte[] expected = out1.toByteArray();
+
+    ByteArrayOutputStream out2 = new ByteArrayOutputStream();
+    DataOutputStream dos2 = new DataOutputStream( out2 );
+    ValueMetaBase vm = new ValueMetaInternetAddress();
+    vm.writeData( dos2, localhost );
+    byte[] actual = out2.toByteArray();
+
+    assertArrayEquals( expected, actual );
+  }
+
   private class StoreLoggingEventListener implements KettleLoggingEventListener {
 
     private List<KettleLoggingEvent> events = new ArrayList<>();
@@ -636,5 +777,19 @@ public class ValueMetaBaseTest {
     public List<KettleLoggingEvent> getEvents() {
       return events;
     }
+  }
+
+  @Test
+  public void testConvertBigNumberToBoolean() {
+    ValueMetaBase vmb = new ValueMetaBase();
+    System.out.println( vmb.convertBigNumberToBoolean( new BigDecimal( "-234" ) ) );
+    System.out.println( vmb.convertBigNumberToBoolean( new BigDecimal( "234" ) ) );
+    System.out.println( vmb.convertBigNumberToBoolean( new BigDecimal( "0" ) ) );
+    System.out.println( vmb.convertBigNumberToBoolean( new BigDecimal( "1.7976E308" ) ) );
+
+    Assert.assertTrue( vmb.convertBigNumberToBoolean( new BigDecimal( "-234" ) ) );
+    Assert.assertTrue( vmb.convertBigNumberToBoolean( new BigDecimal( "234" ) ) );
+    Assert.assertFalse( vmb.convertBigNumberToBoolean( new BigDecimal( "0" ) ) );
+    Assert.assertTrue( vmb.convertBigNumberToBoolean( new BigDecimal( "1.7976E308" ) ) );
   }
 }

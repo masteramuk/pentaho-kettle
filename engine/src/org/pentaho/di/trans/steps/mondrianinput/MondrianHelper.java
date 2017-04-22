@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -45,14 +45,21 @@ import org.pentaho.di.core.DBCacheEntry;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.database.util.DatabaseUtil;
 import org.pentaho.di.core.exception.KettleDatabaseException;
+import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.core.row.ValueMeta;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaBigNumber;
+import org.pentaho.di.core.row.value.ValueMetaBoolean;
+import org.pentaho.di.core.row.value.ValueMetaDate;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.value.ValueMetaInteger;
+import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.trans.step.StepInterface;
 
 import mondrian.olap.Axis;
 import mondrian.olap.Cell;
@@ -84,13 +91,19 @@ public class MondrianHelper {
 
   private List<List<Object>> rows;
   private List<String> headings;
+  private LogChannelInterface log;
   private Connection connection;
+  private static Class<?> PKG = MondrianInputMeta.class; // for i18n purposes, needed by Translator2!!
 
   public MondrianHelper( DatabaseMeta databaseMeta, String catalog, String queryString, VariableSpace space ) {
     this.databaseMeta = databaseMeta;
     this.catalog = catalog;
     this.queryString = queryString;
     this.space = space;
+    // The following may appear to be a hack, but I don't want to change the constructor for backward compatibility sake.
+    if ( space instanceof StepInterface ) {
+      log = ( (StepInterface) space ).getLogChannel();
+    }
   }
 
   @SuppressWarnings( "deprecation" )
@@ -121,8 +134,10 @@ public class MondrianHelper {
       if ( !Utils.isEmpty( databaseMeta.getUsername() ) ) {
         connectString += "JdbcUser=" + space.environmentSubstitute( databaseMeta.getUsername() ) + ";";
       }
-      if ( !Utils.isEmpty( databaseMeta.getPassword() ) ) {
-        connectString += "JdbcPassword=" + space.environmentSubstitute( databaseMeta.getPassword() ) + ";";
+      String password = databaseMeta.getPassword();
+      if ( !Utils.isEmpty( password ) ) {
+        String realPassword = Utils.resolvePassword( space, password );
+        connectString += "JdbcPassword=" + space.environmentSubstitute( realPassword ) + ";";
       }
 
       if ( !Utils.isEmpty( realRole ) ) {
@@ -139,13 +154,37 @@ public class MondrianHelper {
 
   public void close() {
     if ( result != null ) {
-      result.close();
+      try {
+        result.close();
+      } catch ( Exception ignored ) {
+        // Purposely ignored, cannot do anything else here but log it.
+        if ( ( log != null ) && ( log.isDebug() ) ) {
+          log.logDebug( ignored.getMessage() );
+        }
+      }
+      result = null;
     }
     if ( query != null ) {
-      query.clone();
+      try {
+        query.close();
+      } catch ( Exception ignored ) {
+        // Purposely ignored, cannot do anything else here but log it.
+        if ( ( log != null ) && ( log.isDebug() ) ) {
+          log.logDebug( ignored.getMessage() );
+        }
+      }
+      query = null;
     }
     if ( connection != null ) {
-      connection.close();
+      try {
+        connection.close();
+      } catch ( Exception ignored ) {
+        // Purposely ignored, cannot do anything else here but log it.
+        if ( ( log != null ) && ( log.isDebug() ) ) {
+          log.logDebug( ignored.getMessage() );
+        }
+      }
+      connection = null;
     }
   }
 
@@ -159,10 +198,10 @@ public class MondrianHelper {
 
     final Axis[] axes = result.getAxes();
     if ( axes.length != 2 ) {
-      throw new KettleDatabaseException( "Tabular output only supported for 2-dimensional results" );
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "MondrianInputErrorOnlyTabular" ) );
     }
-    headings = new ArrayList<String>();
-    rows = new ArrayList<List<Object>>();
+    headings = new ArrayList<>();
+    rows = new ArrayList<>();
 
     final Axis rowsAxis = axes[1];
     final Axis columnsAxis = axes[0];
@@ -197,7 +236,7 @@ public class MondrianHelper {
         }
       }
 
-      List<Object> rowValues = new ArrayList<Object>();
+      List<Object> rowValues = new ArrayList<>();
 
       // The first row values describe the members on the rows axis.
       for ( Member rowMember : rowPos ) {
@@ -222,7 +261,7 @@ public class MondrianHelper {
     // column, keep scanning until we find one line that has an actual value
     if ( rows.size() > 0 ) {
       int columnCount = rows.get( 0 ).size();
-      HashMap<Integer, ValueMetaInterface> valueMetaHash = new HashMap<Integer, ValueMetaInterface>();
+      HashMap<Integer, ValueMetaInterface> valueMetaHash = new HashMap<>();
 
       for ( int i = 0; i < rows.size(); i++ ) {
 
@@ -240,38 +279,37 @@ public class MondrianHelper {
             continue; // skip this row and look for the metadata in a new one
           }
 
-          int valueType;
+          String valueName = headings.get( c );
+          ValueMetaInterface valueMeta;
 
           if ( valueData instanceof String ) {
-            valueType = ValueMetaInterface.TYPE_STRING;
+            valueMeta = new ValueMetaString( valueName );
           } else if ( valueData instanceof Date ) {
-            valueType = ValueMetaInterface.TYPE_DATE;
+            valueMeta = new ValueMetaDate( valueName );
           } else if ( valueData instanceof Boolean ) {
-            valueType = ValueMetaInterface.TYPE_BOOLEAN;
+            valueMeta = new ValueMetaBoolean( valueName );
           } else if ( valueData instanceof Integer ) {
-            valueType = ValueMetaInterface.TYPE_INTEGER;
+            valueMeta = new ValueMetaInteger( valueName );
             valueData = Long.valueOf( ( (Integer) valueData ).longValue() );
           } else if ( valueData instanceof Short ) {
-            valueType = ValueMetaInterface.TYPE_INTEGER;
+            valueMeta = new ValueMetaInteger( valueName );
             valueData = Long.valueOf( ( (Short) valueData ).longValue() );
           } else if ( valueData instanceof Byte ) {
-            valueType = ValueMetaInterface.TYPE_INTEGER;
+            valueMeta = new ValueMetaInteger( valueName );
             valueData = Long.valueOf( ( (Byte) valueData ).longValue() );
           } else if ( valueData instanceof Long ) {
-            valueType = ValueMetaInterface.TYPE_INTEGER;
+            valueMeta = new ValueMetaInteger( valueName );
           } else if ( valueData instanceof Double ) {
-            valueType = ValueMetaInterface.TYPE_NUMBER;
+            valueMeta = new ValueMetaNumber( valueName );
           } else if ( valueData instanceof Float ) {
-            valueType = ValueMetaInterface.TYPE_NUMBER;
+            valueMeta = new ValueMetaNumber( valueName );
             valueData = Double.valueOf( ( (Float) valueData ).doubleValue() );
           } else if ( valueData instanceof BigDecimal ) {
-            valueType = ValueMetaInterface.TYPE_BIGNUMBER;
+            valueMeta = new ValueMetaBigNumber( valueName );
           } else {
-            throw new KettleDatabaseException( "Unhandled data type found '"
-              + valueData.getClass().toString() + "'" );
+            throw new KettleDatabaseException( BaseMessages.getString( PKG, "MondrianInputErrorUnhandledType", valueData.getClass().toString() ) );
           }
 
-          ValueMetaInterface valueMeta = new ValueMeta( headings.get( c ), valueType );
           valueMetaHash.put( c, valueMeta );
         }
 
@@ -281,7 +319,7 @@ public class MondrianHelper {
       }
 
       // Build the list of valueMetas
-      List<ValueMetaInterface> valueMetaList = new ArrayList<ValueMetaInterface>();
+      List<ValueMetaInterface> valueMetaList = new ArrayList<>();
 
       for ( int c = 0; c < columnCount; c++ ) {
         if ( valueMetaHash.containsKey( new Integer( c ) ) ) {
@@ -316,8 +354,8 @@ public class MondrianHelper {
   public void createFlattenedOutput() throws KettleDatabaseException {
 
     final Axis[] axes = result.getAxes();
-    rows = new ArrayList<List<Object>>();
-    headings = new ArrayList<String>();
+    rows = new ArrayList<>();
+    headings = new ArrayList<>();
 
     // Compute headings. Each heading is a hierarchy name. If there are say
     // 2 members on the columns, and 3 members on the rows axis, then there
@@ -337,7 +375,7 @@ public class MondrianHelper {
     }
 
     int[] coords = new int[axes.length];
-    outputFlattenedRecurse( result, rows, new ArrayList<Object>(), coords, 0 );
+    outputFlattenedRecurse( result, rows, new ArrayList<>(), coords, 0 );
 
     outputRowMeta = new RowMeta();
 
@@ -377,7 +415,7 @@ public class MondrianHelper {
         } else if ( valueData instanceof BigDecimal ) {
           valueType = ValueMetaInterface.TYPE_BIGNUMBER;
         } else {
-          throw new KettleDatabaseException( "Unhandled data type found '" + valueData.getClass().toString() + "'" );
+          throw new KettleDatabaseException( BaseMessages.getString( PKG, "MondrianInputErrorUnhandledType", valueData.getClass().toString() ) );
         }
 
         try {
@@ -412,7 +450,7 @@ public class MondrianHelper {
       rowValues.add( cell.getValue() );
 
       // Add a copy of the completed row to the list of rows.
-      rows.add( new ArrayList<Object>( rowValues ) );
+      rows.add( new ArrayList<>( rowValues ) );
     } else {
       final Axis axis = axes[axisOrdinal];
       int k = -1;

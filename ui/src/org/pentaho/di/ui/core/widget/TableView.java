@@ -3,7 +3,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -566,6 +566,7 @@ public class TableView extends Composite {
           try {
             Thread.sleep( 500 );
           } catch ( InterruptedException ignored ) {
+            // ignored
           }
           Runnable r = new Runnable() {
             @Override
@@ -2003,6 +2004,10 @@ public class TableView extends Composite {
     table.showItem( row );
     table.setSelection( new TableItem[]{ row } );
 
+    if ( columns.length == 0 ) {
+      return;
+    }
+
     switch ( columns[colnr - 1].getType() ) {
       case ColumnInfo.COLUMN_TYPE_TEXT:
         isTextButton = false;
@@ -2263,7 +2268,7 @@ public class TableView extends Composite {
       opt = colinfo.getComboValuesSelectionListener().getComboValues( row, rownr, colnr );
     }
     combo.setItems( opt );
-    combo.setVisibleItemCount( opt.length - 1 );
+    combo.setVisibleItemCount( opt.length );
     combo.setText( row.getText( colnr ) );
     if ( lsMod != null ) {
       combo.addModifyListener( lsMod );
@@ -2440,15 +2445,12 @@ public class TableView extends Composite {
 
       try {
         int extra = 15;
-        if ( Const.isWindows() ) {
-          extra += 15;
-        } else if ( Const.isLinux() ) {
+        if ( Const.isWindows() || Const.isLinux() ) {
           extra += 15;
         }
-        // Platform specific code not needed any more with current version SWT
-        // if (Const.isOSX() || Const.isLinux()) max*=1.25;
+
         if ( tc.getWidth() != max + extra ) {
-          if ( c > 0 || ( c == 0 && addIndexColumn ) ) {
+          if ( c > 0 ) {
             if ( columns[c - 1].getWidth() == -1 ) {
               tc.setWidth( max + extra );
             } else {
@@ -2459,6 +2461,14 @@ public class TableView extends Composite {
       } catch ( Exception e ) {
         // Ignore errors
       }
+    }
+    if ( table.isListening( SWT.Resize ) ) {
+      Event resizeEvent = new Event();
+      resizeEvent.widget = table;
+      resizeEvent.type = SWT.Resize;
+      resizeEvent.display = getDisplay();
+      resizeEvent.setBounds( table.getBounds() );
+      table.notifyListeners( SWT.Resize, resizeEvent );
     }
     unEdit();
   }

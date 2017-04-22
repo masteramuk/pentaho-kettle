@@ -3,7 +3,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -151,6 +151,8 @@ public class Database implements VariableSpace, LoggingObjectInterface {
 
   private LogChannelInterface log;
   private LoggingObjectInterface parentLoggingObject;
+  private static final String[] TABLE_TYPES_TO_GET = { "TABLE", "VIEW" };
+  private static final String TABLES_META_DATA_TABLE_NAME = "TABLE_NAME";
 
   /**
    * Number of times a connection was opened using this object. Only used in the context of a database connection map
@@ -271,7 +273,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
   @Override
   public boolean equals( Object obj ) {
     Database other = (Database) obj;
-    return other.databaseMeta.equals( other.databaseMeta );
+    return this.databaseMeta.equals( other.databaseMeta );
   }
 
   /**
@@ -590,98 +592,93 @@ public class Database implements VariableSpace, LoggingObjectInterface {
    * Disconnect from the database and close all open prepared statements.
    */
   public synchronized void disconnect() {
+    if ( connection == null ) {
+      return; // Nothing to do...
+    }
     try {
-      if ( connection == null ) {
+      if ( connection.isClosed() ) {
         return; // Nothing to do...
       }
+    } catch ( SQLException ex ) {
+      // cannot do anything about this but log it
+      log.logError( "Error checking closing connection:" + Const.CR + ex.getMessage() );
+      log.logError( Const.getStackTracker( ex ) );
+    }
+
+    if ( pstmt != null ) {
       try {
-        if ( connection.isClosed() ) {
-          return; // Nothing to do...
-        }
+        pstmt.close();
       } catch ( SQLException ex ) {
         // cannot do anything about this but log it
-        log.logError( "Error checking closing connection:" + Const.CR + ex.getMessage() );
+        log.logError( "Error closing statement:" + Const.CR + ex.getMessage() );
         log.logError( Const.getStackTracker( ex ) );
       }
-
-      if ( pstmt != null ) {
-        try {
-          pstmt.close();
-        } catch ( SQLException ex ) {
-          // cannot do anything about this but log it
-          log.logError( "Error closing statement:" + Const.CR + ex.getMessage() );
-          log.logError( Const.getStackTracker( ex ) );
-        }
-        pstmt = null;
-      }
-      if ( prepStatementLookup != null ) {
-        try {
-          prepStatementLookup.close();
-        } catch ( SQLException ex ) {
-          // cannot do anything about this but log it
-          log.logError( "Error closing lookup statement:" + Const.CR + ex.getMessage() );
-          log.logError( Const.getStackTracker( ex ) );
-        }
-        prepStatementLookup = null;
-      }
-      if ( prepStatementInsert != null ) {
-        try {
-          prepStatementInsert.close();
-        } catch ( SQLException ex ) {
-          // cannot do anything about this but log it
-          log.logError( "Error closing insert statement:" + Const.CR + ex.getMessage() );
-          log.logError( Const.getStackTracker( ex ) );
-        }
-        prepStatementInsert = null;
-      }
-      if ( prepStatementUpdate != null ) {
-        try {
-          prepStatementUpdate.close();
-        } catch ( SQLException ex ) {
-          // cannot do anything about this but log it
-          log.logError( "Error closing update statement:" + Const.CR + ex.getMessage() );
-          log.logError( Const.getStackTracker( ex ) );
-        }
-        prepStatementUpdate = null;
-      }
-      if ( pstmt_seq != null ) {
-        try {
-          pstmt_seq.close();
-        } catch ( SQLException ex ) {
-          // cannot do anything about this but log it
-          log.logError( "Error closing seq statement:" + Const.CR + ex.getMessage() );
-          log.logError( Const.getStackTracker( ex ) );
-        }
-        pstmt_seq = null;
-      }
-
-      // See if there are other steps using this connection in a connection
-      // group.
-      // If so, we will hold commit & connection close until then.
-      //
-      if ( !Utils.isEmpty( connectionGroup ) ) {
-        return;
-      } else {
-        if ( !isAutoCommit() ) {
-          // Do we really still need this commit??
-          try {
-            commit();
-          } catch ( KettleDatabaseException ex ) {
-            // cannot do anything about this but log it
-            log.logError( "Error committing:" + Const.CR + ex.getMessage() );
-            log.logError( Const.getStackTracker( ex ) );
-          }
-        }
-      }
-
+      pstmt = null;
+    }
+    if ( prepStatementLookup != null ) {
       try {
-        ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.DatabaseDisconnected.id, this );
-      } catch ( KettleException e ) {
-        throw new KettleDatabaseException( e );
+        prepStatementLookup.close();
+      } catch ( SQLException ex ) {
+        // cannot do anything about this but log it
+        log.logError( "Error closing lookup statement:" + Const.CR + ex.getMessage() );
+        log.logError( Const.getStackTracker( ex ) );
       }
-    } catch ( KettleDatabaseException dbe ) {
-      log.logError( "Error disconnecting from database:" + Const.CR + dbe.getMessage() );
-      log.logError( Const.getStackTracker( dbe ) );
+      prepStatementLookup = null;
+    }
+    if ( prepStatementInsert != null ) {
+      try {
+        prepStatementInsert.close();
+      } catch ( SQLException ex ) {
+        // cannot do anything about this but log it
+        log.logError( "Error closing insert statement:" + Const.CR + ex.getMessage() );
+        log.logError( Const.getStackTracker( ex ) );
+      }
+      prepStatementInsert = null;
+    }
+    if ( prepStatementUpdate != null ) {
+      try {
+        prepStatementUpdate.close();
+      } catch ( SQLException ex ) {
+        // cannot do anything about this but log it
+        log.logError( "Error closing update statement:" + Const.CR + ex.getMessage() );
+        log.logError( Const.getStackTracker( ex ) );
+      }
+      prepStatementUpdate = null;
+    }
+    if ( pstmt_seq != null ) {
+      try {
+        pstmt_seq.close();
+      } catch ( SQLException ex ) {
+        // cannot do anything about this but log it
+        log.logError( "Error closing seq statement:" + Const.CR + ex.getMessage() );
+        log.logError( Const.getStackTracker( ex ) );
+      }
+      pstmt_seq = null;
+    }
+
+    // See if there are other steps using this connection in a connection
+    // group.
+    // If so, we will hold commit & connection close until then.
+    //
+    if ( !Utils.isEmpty( connectionGroup ) ) {
+      return;
+    } else {
+      if ( !isAutoCommit() ) {
+        // Do we really still need this commit??
+        try {
+          commit();
+        } catch ( KettleDatabaseException ex ) {
+          // cannot do anything about this but log it
+          log.logError( "Error committing:" + Const.CR + ex.getMessage() );
+          log.logError( Const.getStackTracker( ex ) );
+        }
+      }
+    }
+    try {
+      ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.DatabaseDisconnected.id, this );
+    } catch ( KettleException e ) {
+      log.logError( "Error disconnecting from database:" + Const.CR + e.getMessage() );
+      log.logError( Const.getStackTracker( e ) );
     } finally {
       // Always close the connection, irrespective of what happens above...
       try {
@@ -1740,7 +1737,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
         log.snap( Metrics.METRIC_DATABASE_CREATE_SQL_STOP, databaseMeta.getName() );
         if ( canWeSetFetchSize( sel_stmt ) ) {
           int fs = Const.FETCH_SIZE <= sel_stmt.getMaxRows() ? sel_stmt.getMaxRows() : Const.FETCH_SIZE;
-          if ( databaseMeta.getDatabaseInterface() instanceof MySQLDatabaseMeta
+          if ( databaseMeta.getDatabaseInterface().isMySQLVariant()
             && databaseMeta.isStreamingResults() ) {
             sel_stmt.setFetchSize( Integer.MIN_VALUE );
           } else {
@@ -1854,8 +1851,10 @@ public class Database implements VariableSpace, LoggingObjectInterface {
   /**
    * See if the table specified exists by reading
    *
-   * @param tablename The name of the table to check.<br> This is supposed to be the properly quoted name of the table
-   *                  or the complete schema-table name combination.
+   * @param tablename
+   *          The name of the table to check.<br>
+   *          This is supposed to be the properly quoted name of the table or the complete schema-table name
+   *          combination.
    * @return true if the table exists, false if it doesn't.
    */
   public boolean checkTableExists( String tablename ) throws KettleDatabaseException {
@@ -1863,7 +1862,6 @@ public class Database implements VariableSpace, LoggingObjectInterface {
       if ( log.isDebug() ) {
         log.logDebug( "Checking if table [" + tablename + "] exists!" );
       }
-
       // Just try to read from the table.
       String sql = databaseMeta.getSQLTableExists( tablename );
       try {
@@ -1872,23 +1870,68 @@ public class Database implements VariableSpace, LoggingObjectInterface {
       } catch ( KettleDatabaseException e ) {
         return false;
       }
-
-      /*
-       * if (getDatabaseMetaData()!=null) { ResultSet alltables = getDatabaseMetaData().getTables(null, null, "%" , new
-       * String[] { "TABLE", "VIEW", "SYNONYM" } ); boolean found = false; if (alltables!=null) { while
-       * (alltables.next() && !found) { String schemaName = alltables.getString("TABLE_SCHEM"); String name =
-       * alltables.getString("TABLE_NAME"); if ( tablename.equalsIgnoreCase(name) || ( schemaName!=null &&
-       * tablename.equalsIgnoreCase( databaseMeta.getSchemaTableCombination(schemaName, name)) ) ) {
-       * log.logDebug("table ["+tablename+"] was found!"); found=true; } } alltables.close();
-       *
-       * return found; } else { throw new KettleDatabaseException(
-       * "Unable to read table-names from the database meta-data."); } } else { throw new KettleDatabaseException(
-       * "Unable to get database meta-data from the database."); }
-       */
     } catch ( Exception e ) {
-      throw new KettleDatabaseException( "Unable to check if table ["
-        + tablename + "] exists on connection [" + databaseMeta.getName() + "]", e );
+      throw new KettleDatabaseException( "Unable to check if table [" + tablename + "] exists on connection [" + databaseMeta.getName() + "]", e );
     }
+  }
+
+  /**
+   * See if the table specified exists by getting db metadata.
+   *
+   * @param tablename
+   *          The name of the table to check.<br>
+   *          This is supposed to be the properly quoted name of the table or the complete schema-table name
+   *          combination.
+   * @return true if the table exists, false if it doesn't.
+   * @throws KettleDatabaseException
+   */
+  public boolean checkTableExistsByDbMeta( String shema, String tablename ) throws KettleDatabaseException {
+    boolean isTableExist = false;
+    if ( log.isDebug() ) {
+      log.logDebug( BaseMessages.getString( PKG, "Database.Info.CheckingIfTableExistsInDbMetaData", tablename ) );
+    }
+    try ( ResultSet resTables = getTableMetaData( shema, tablename ) ) {
+      while ( resTables.next() ) {
+        String resTableName = resTables.getString( TABLES_META_DATA_TABLE_NAME );
+        if ( tablename.equalsIgnoreCase( resTableName ) ) {
+          if ( log.isDebug() ) {
+            log.logDebug( BaseMessages.getString( PKG, "Database.Info.TableFound", tablename ) );
+          }
+          isTableExist = true;
+          break;
+        }
+      }
+    } catch ( SQLException e ) {
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "Database.Error.UnableToCheckExistingTable", tablename, databaseMeta.getName() ), e );
+    }
+    return isTableExist;
+  }
+
+  /**
+   * Retrieves the table description matching the schema and table name.
+   *
+   * @param shema
+   *          the schema name pattern
+   * @param table
+   *          the table name pattern
+   * @return table description row set
+   * @throws KettleDatabaseException
+   *           if DatabaseMetaData is null or some database error occurs
+   */
+  private ResultSet getTableMetaData( String schema, String table ) throws KettleDatabaseException {
+    ResultSet tables = null;
+    if ( getDatabaseMetaData() == null ) {
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "Database.Error.UnableToGetDbMeta" ) );
+    }
+    try {
+      tables = getDatabaseMetaData().getTables( null, schema, table, TABLE_TYPES_TO_GET );
+    } catch ( SQLException e ) {
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "Database.Error.UnableToGetTableNames" ), e );
+    }
+    if ( tables == null ) {
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "Database.Error.UnableToGetTableNames" ) );
+    }
+    return tables;
   }
 
   /**
@@ -2216,6 +2259,12 @@ public class Database implements VariableSpace, LoggingObjectInterface {
         valueMeta.setComments( name );
         valueMeta.setLength( size );
         valueMeta.setOriginalColumnTypeName( type );
+
+        valueMeta.setConversionMask( columns.getString( "SOURCE_MASK" ) );
+        valueMeta.setDecimalSymbol( columns.getString( "SOURCE_DECIMAL_SYMBOL" ) );
+        valueMeta.setGroupingSymbol( columns.getString( "SOURCE_GROUPING_SYMBOL" ) );
+        valueMeta.setCurrencySymbol( columns.getString( "SOURCE_CURRENCY_SYMBOL" ) );
+
         rowMeta.addValueMeta( valueMeta );
       } else {
         log.logBasic( "Database.getQueryFields() ValueMetaInterface mapping not resolved for the column " + name );
@@ -2243,7 +2292,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
         sel_stmt = connection.createStatement( ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY );
         try {
           if ( databaseMeta.isFetchSizeSupported() && sel_stmt.getMaxRows() >= 1 ) {
-            if ( databaseMeta.getDatabaseInterface() instanceof MySQLDatabaseMeta ) {
+            if ( databaseMeta.getDatabaseInterface().isMySQLVariant() ) {
               sel_stmt.setFetchSize( Integer.MIN_VALUE );
             } else {
               sel_stmt.setFetchSize( 1 );
@@ -3637,7 +3686,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
         if ( includeSchema ) {
           res.add( databaseMeta.getQuotedSchemaTableCombination( schema, table ) );
         } else {
-          res.add( table );
+          res.add( databaseMeta.getQuotedSchemaTableCombination( null, table ) );
         }
       }
     }
@@ -3686,7 +3735,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
           schema = cat;
         }
 
-        String table = alltables.getString( "TABLE_NAME" );
+        String table = alltables.getString( TABLES_META_DATA_TABLE_NAME );
 
         if ( log.isRowLevel() ) {
           log.logRowlevel( toString(), "got table from meta-data: "
@@ -3785,7 +3834,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
           schema = cat;
         }
 
-        String table = allviews.getString( "TABLE_NAME" );
+        String table = allviews.getString( TABLES_META_DATA_TABLE_NAME );
 
         if ( log.isRowLevel() ) {
           log.logRowlevel( toString(), "got view from meta-data: "
@@ -3884,7 +3933,7 @@ public class Database implements VariableSpace, LoggingObjectInterface {
           schema = cat;
         }
 
-        String table = alltables.getString( "TABLE_NAME" );
+        String table = alltables.getString( TABLES_META_DATA_TABLE_NAME );
 
         if ( log.isRowLevel() ) {
           log.logRowlevel( toString(), "got synonym from meta-data: "

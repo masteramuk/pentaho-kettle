@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -33,9 +33,23 @@ import org.eclipse.swt.events.KeyListener;
 import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.widgets.Control;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.ui.spoon.trans.TransGraph;
 
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
 public final class ExpandedContentManager {
+
+  static Supplier<Spoon> spoonSupplier = Spoon::getInstance;
+
+  /**
+   * The value of the most recent URL navigated to.
+   * Storing this value is useful because in some Operating Systems the internal browser implementations used via the
+   * SWT browser widget seem to always return the same URL when a new value is set that only contains changes in its
+   * hash section.
+   */
+  static String lastNavigateURL;
 
   /**
    * isBrowserVisible
@@ -44,7 +58,7 @@ public final class ExpandedContentManager {
    *         hasn't been created it will return false.
    */
   public static boolean isVisible() {
-    return isVisible( Spoon.getInstance().getActiveTransGraph() );
+    return isVisible( spoonInstance().getActiveTransGraph() );
   }
 
   /**
@@ -69,7 +83,7 @@ public final class ExpandedContentManager {
    * creates a web browser for the current TransGraph
    */
   public static void createExpandedContent( String url ) {
-    createExpandedContent( Spoon.getInstance().getActiveTransGraph(), url );
+    createExpandedContent( spoonInstance().getActiveTransGraph(), url );
   }
 
   /**
@@ -91,11 +105,23 @@ public final class ExpandedContentManager {
       browser = new Browser( parent, SWT.NONE );
       browser.addKeyListener( new KeyListener() {
         @Override public void keyPressed( KeyEvent keyEvent ) {
-          if ( keyEvent.stateMask == SWT.CTRL && keyEvent.keyCode == SWT.F6 ) {
+          int state = keyEvent.stateMask, key = keyEvent.keyCode;
+
+          boolean copyContent = state == SWT.CTRL && key == SWT.F6,
+              arrowNavigation = ( state == SWT.COMMAND || state == SWT.ALT )
+                  && ( key == SWT.ARROW_LEFT || key == SWT.ARROW_RIGHT ),
+              backslashNavigation = ( state == SWT.SHIFT && key == SWT.BS ),
+              reloadContent = state == SWT.CTRL && ( key == SWT.F5 || key == 114 /* r key */ ) || key == SWT.F5,
+              zoomContent = state == SWT.CTRL && ( key == SWT.KEYPAD_ADD || key == SWT.KEYPAD_SUBTRACT
+                  || key == 61 /* + key */ || key == 45 /* - key */ );
+
+          if ( copyContent ) {
             Browser thisBrowser = (Browser) keyEvent.getSource();
             Clipboard clipboard = new Clipboard( thisBrowser.getDisplay() );
-            clipboard.setContents( new String[]{thisBrowser.getUrl()}, new Transfer[]{ TextTransfer.getInstance()} );
+            clipboard.setContents( new String[] { lastNavigateURL }, new Transfer[] { TextTransfer.getInstance() } );
             clipboard.dispose();
+          } else if ( arrowNavigation || backslashNavigation || reloadContent || zoomContent ) {
+            keyEvent.doit = false;
           }
         }
 
@@ -103,7 +129,9 @@ public final class ExpandedContentManager {
         }
       } );
     }
+
     browser.setUrl( url );
+    lastNavigateURL = url;
   }
 
   /**
@@ -112,7 +140,7 @@ public final class ExpandedContentManager {
    * Creates and shows the web browser for the active TransGraph
    */
   public static void showExpandedContent() {
-    showExpandedContent( Spoon.getInstance().getActiveTransGraph() );
+    showExpandedContent( spoonInstance().getActiveTransGraph() );
   }
 
   /**
@@ -132,6 +160,9 @@ public final class ExpandedContentManager {
     }
     if ( !isVisible( graph ) ) {
       maximizeExpandedContent( browser );
+    }
+    if ( Const.isOSX() && graph.isExecutionResultsPaneVisible() ) {
+      graph.extraViewComposite.setVisible( false );
     }
     browser.moveAbove( null );
     browser.getParent().layout( true );
@@ -160,7 +191,16 @@ public final class ExpandedContentManager {
    * hides the web browser associated with the active TransGraph
    */
   public static void hideExpandedContent() {
-    hideExpandedContent( Spoon.getInstance().getActiveTransGraph() );
+    hideExpandedContent( spoonInstance().getActiveTransGraph() );
+  }
+
+  /**
+   * closeExpandedContent
+   *
+   * closes the web browser associated with the active TransGraph
+   */
+  public static void closeExpandedContent() {
+    closeExpandedContent( spoonInstance().getActiveTransGraph() );
   }
 
   /**
@@ -170,16 +210,46 @@ public final class ExpandedContentManager {
    *          the TransGraph whose web browser will be hidden
    */
   public static void hideExpandedContent( TransGraph graph ) {
+    doToExpandedContent( graph, browser -> {
+      if ( Const.isOSX() && graph.isExecutionResultsPaneVisible() ) {
+        graph.extraViewComposite.setVisible( true );
+      }
+      browser.moveBelow( null );
+      browser.getParent().layout( true, true );
+      browser.getParent().redraw();
+    } );
+  }
+
+  /**
+   * closeExpandedContent( TransGraph graph )
+   *
+   * @param graph
+   *          the TransGraph whose web browser will be closed
+   */
+  public static void closeExpandedContent( TransGraph graph ) {
+    doToExpandedContent( graph, Browser::close );
+  }
+
+  /**
+   * doToExpandedContent( TransGraph graph )
+   *
+   * @param graph
+   *          the TransGraph whose web browser will be hidden
+   * @param browserAction Consumer for acting on the browser
+   */
+  private static void doToExpandedContent( TransGraph graph, Consumer<Browser> browserAction ) {
     Browser browser = getExpandedContentForTransGraph( graph );
     if ( browser == null ) {
       return;
     }
-    SashForm sash = (SashForm) Spoon.getInstance().getDesignParent();
-    sash.setWeights( Spoon.getInstance().getTabSet().getSelected().getSashWeights() );
+    SashForm sash = (SashForm) spoonInstance().getDesignParent();
+    sash.setWeights( spoonInstance().getTabSet().getSelected().getSashWeights() );
 
-    browser.moveBelow( null );
-    browser.getParent().layout( true );
-    browser.getParent().redraw();
+    browserAction.accept( browser );
+  }
+
+  private static Spoon spoonInstance() {
+    return spoonSupplier.get();
   }
 
   /**
@@ -189,11 +259,11 @@ public final class ExpandedContentManager {
    *          the browser object to maximize. We try to take up as much of the Spoon window as possible.
    */
   private static void maximizeExpandedContent( Browser browser ) {
-    SashForm sash = (SashForm) Spoon.getInstance().getDesignParent();
+    SashForm sash = (SashForm) spoonInstance().getDesignParent();
     int[] weights = sash.getWeights();
     int[] savedSashWeights = new int[weights.length];
     System.arraycopy( weights, 0, savedSashWeights, 0, weights.length );
-    Spoon.getInstance().getTabSet().getSelected().setSashWeights( savedSashWeights );
+    spoonInstance().getTabSet().getSelected().setSashWeights( savedSashWeights );
     weights[0] = 0;
     weights[1] = 1000;
     sash.setWeights( weights );

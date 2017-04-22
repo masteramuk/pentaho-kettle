@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.ResultFile;
@@ -68,6 +69,8 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
   private static final String FILE_COMPRESSION_TYPE_NONE =
       TextFileOutputMeta.fileCompressionTypeCodes[TextFileOutputMeta.FILE_COMPRESSION_TYPE_NONE];
+  private static final boolean COMPATIBILITY_APPEND_NO_HEADER = "Y".equals(
+          Const.NVL( System.getProperty( Const.KETTLE_COMPATIBILITY_TEXT_FILE_OUTPUT_APPEND_NO_HEADER ), "N" ) );
 
   public TextFileOutputMeta meta;
 
@@ -91,11 +94,13 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
     boolean result = true;
     boolean bEndedLineWrote = false;
+    boolean fileExist;
     Object[] r = getRow(); // This also waits for a row to be finished.
-
+    if ( r != null ) {
+      data.outputRowMeta = getInputRowMeta().clone();
+    }
     if ( r != null && first ) {
       first = false;
-      data.outputRowMeta = getInputRowMeta().clone();
       meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
 
       // if file name in field is enabled then set field name and open file
@@ -115,19 +120,21 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
         data.fileNameMeta = getInputRowMeta().getValueMeta( data.fileNameFieldIndex );
         data.fileName = data.fileNameMeta.getString( r[data.fileNameFieldIndex] );
-        setDataWriterForFilename( data.fileName );
+        fileExist = isFileExist( data.fileName );
+        setDataWriterForFilename( data.fileName, fileExist );
       } else if ( meta.isDoNotOpenNewFileInit() && !meta.isFileNameInField() ) {
+        fileExist = isFileExist( meta.getFileName() );
         // Open a new file here
         //
         openNewFile( meta.getFileName() );
         data.oneFileOpened = true;
         initBinaryDataFields();
+      } else {
+        fileExist = isFileExist( meta.getFileName() );
       }
 
-      if ( !meta.isFileAppended() && ( meta.isHeaderEnabled() || meta.isFooterEnabled() ) ) { // See if we have to write a header-line)
-        if ( !meta.isFileNameInField() && meta.isHeaderEnabled() && data.outputRowMeta != null ) {
-          writeHeader();
-        }
+      if ( isNeedWriteHeader( fileExist ) ) {
+        writeHeader();
       }
 
       data.fieldnrs = new int[meta.getOutputFields().length];
@@ -189,7 +196,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     //
     if ( meta.isFileNameInField() ) {
       String baseFilename = data.fileNameMeta.getString( r[data.fileNameFieldIndex] );
-      setDataWriterForFilename( baseFilename );
+      setDataWriterForFilename( baseFilename, isFileExist( baseFilename ) );
     }
     writeRowToFile( data.outputRowMeta, r );
     putRow( data.outputRowMeta, r ); // in case we want it to go further...
@@ -201,6 +208,33 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     return result;
   }
 
+  boolean isFileExist( String fileName ) throws KettleException {
+    boolean fileExist;
+    try {
+      fileExist = getFileObject( buildFilename( environmentSubstitute( fileName ), true ), getTransMeta() ).exists();
+    } catch ( FileSystemException e ) {
+      throw new KettleException( e );
+    }
+    return fileExist;
+  }
+
+  private boolean isNeedWriteHeader( boolean fileExist ) {
+    if ( meta.isFileNameInField() ) {
+      return false;
+    }
+    if ( !meta.isFileAppended() && ( meta.isHeaderEnabled() || meta.isFooterEnabled() ) ) { // See if we have to write a header-line)
+      if ( meta.isHeaderEnabled() && data.outputRowMeta != null ) {
+        return true;
+      }
+    }
+
+    //PDI-15650
+    //File Exists=N Flag Set=N Add Header=Y Append=Y
+    //Result = File is created, header is written at top of file (this changed by the fix)
+    return meta.isHeaderEnabled() && !fileExist && meta.isFileAppended() && !COMPATIBILITY_APPEND_NO_HEADER;
+
+  }
+
   /**
    * This method should only be used when you have a filename in the input stream.
    *
@@ -208,7 +242,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
    *          the filename to set the data.writer field for
    * @throws KettleException
    */
-  private void setDataWriterForFilename( String filename ) throws KettleException {
+  private void setDataWriterForFilename( String filename, boolean fileExist ) throws KettleException {
     // First handle the writers themselves.
     // If we didn't have a writer yet, we create one.
     // Basically we open a new file
@@ -219,9 +253,12 @@ public class TextFileOutput extends BaseStep implements StepInterface {
       data.oneFileOpened = true;
       data.fileWriterMap.put( filename, data.writer );
 
+      boolean isNeedWriteHeader = ( !meta.isFileAppended() && meta.isHeaderEnabled() )
+              || ( meta.isHeaderEnabled() && !fileExist && meta.isFileAppended()
+              && !COMPATIBILITY_APPEND_NO_HEADER );
       // If it's the first time we open it and we have a header, we write a header...
       //
-      if ( !meta.isFileAppended() && meta.isHeaderEnabled() ) {
+      if ( isNeedWriteHeader ) {
         if ( writeHeader() ) {
           incrementLinesOutput();
         }
@@ -229,7 +266,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     }
   }
 
-  protected void writeRowToFile( RowMetaInterface rowMeta, Object[] r ) throws KettleStepException {
+  public void writeRowToFile( RowMetaInterface rowMeta, Object[] r ) throws KettleStepException {
     try {
       if ( meta.getOutputFields() == null || meta.getOutputFields().length == 0 ) {
         /*
@@ -312,11 +349,11 @@ public class TextFileOutput extends BaseStep implements StepInterface {
       }
     } else {
       byte[] text;
-      if ( Utils.isEmpty( v.getStringEncoding() ) ) {
+      if ( Utils.isEmpty( meta.getEncoding() ) ) {
         text = string.getBytes();
       } else {
         try {
-          text = string.getBytes( v.getStringEncoding() );
+          text = string.getBytes( meta.getEncoding() );
         } catch ( UnsupportedEncodingException e ) {
           throw new KettleValueException( "Unable to convert String to Binary with specified string encoding ["
               + v.getStringEncoding() + "]", e );
@@ -999,3 +1036,4 @@ public class TextFileOutput extends BaseStep implements StepInterface {
   }
 
 }
+

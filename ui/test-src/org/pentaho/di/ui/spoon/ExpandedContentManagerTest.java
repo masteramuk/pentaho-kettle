@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -22,17 +22,20 @@
 
 package org.pentaho.di.ui.spoon;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import org.eclipse.swt.browser.Browser;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.junit.Test;
 import org.pentaho.di.ui.spoon.trans.TransGraph;
+import org.pentaho.xul.swt.tab.TabItem;
+import org.pentaho.xul.swt.tab.TabSet;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ExpandedContentManagerTest {
 
@@ -72,5 +75,48 @@ public class ExpandedContentManagerTest {
     Control[] children = new Control[] { control1, control2, browser };
     when( transGraphMock.getChildren() ).thenReturn( children );
     ExpandedContentManager.createExpandedContent( transGraphMock, "" );
+    verify( browser ).setUrl( "" );
   }
+
+  @Test
+  public void testHideExpandedContentManager() throws Exception {
+    TransGraph transGraph = mock( TransGraph.class );
+    Browser browser = mock( Browser.class );
+    SashForm sashForm = mock( SashForm.class );
+
+    Composite parent = setupExpandedContentMocks( transGraph, browser, sashForm );
+    ExpandedContentManager.hideExpandedContent( transGraph );
+    verify( browser ).moveBelow( null );
+    verify( parent ).layout( true, true );
+    verify( parent ).redraw();
+    verify( sashForm ).setWeights( new int[] { 3, 2, 1 } );
+  }
+
+  @Test
+  public void testCloseExpandedContentManager() throws Exception {
+    TransGraph transGraph = mock( TransGraph.class );
+    Browser browser = mock( Browser.class );
+    SashForm sashForm = mock( SashForm.class );
+
+    setupExpandedContentMocks( transGraph, browser, sashForm );
+    ExpandedContentManager.closeExpandedContent( transGraph );
+    verify( browser ).close();
+    verify( sashForm ).setWeights( new int[] { 3, 2, 1 } );
+  }
+
+  private Composite setupExpandedContentMocks( TransGraph transGraph, Browser browser, SashForm sashForm ) {
+    Spoon spoon = mock( Spoon.class );
+    Composite parent = mock( Composite.class );
+    TabSet tabSet = mock( TabSet.class );
+    TabItem tabItem = mock( TabItem.class );
+    ExpandedContentManager.spoonSupplier = () -> spoon;
+    when( spoon.getDesignParent() ).thenReturn( sashForm );
+    when( spoon.getTabSet() ).thenReturn( tabSet );
+    when( tabSet.getSelected() ).thenReturn( tabItem );
+    when( tabItem.getSashWeights() ).thenReturn( new int[] { 3, 2, 1 } );
+    when( transGraph.getChildren() ).thenReturn( new Control[]{ browser } );
+    when( browser.getParent() ).thenReturn( parent );
+    return parent;
+  }
+
 }

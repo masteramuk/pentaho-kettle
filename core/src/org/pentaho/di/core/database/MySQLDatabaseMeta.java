@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -38,7 +38,7 @@ import java.util.Set;
 
 public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInterface {
 
-  private static final Set
+  private static final Set<String>
     SHORT_MESSAGE_EXCEPTIONS =
     Sets.newHashSet( "com.mysql.jdbc.PacketTooBigException", "com.mysql.jdbc.MysqlDataTruncation" );
 
@@ -458,5 +458,11 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
   @Override public boolean fullExceptionLog( Exception e ) {
     Throwable cause = ( e == null ? null : e.getCause() );
     return !( cause != null && SHORT_MESSAGE_EXCEPTIONS.contains( cause.getClass().getName() ) );
+  }
+
+  @Override
+  public void addDefaultOptions() {
+    addExtraOption( getPluginId(), "defaultFetchSize", "500" );
+    addExtraOption( getPluginId(), "useCursorFetch", "true" );
   }
 }

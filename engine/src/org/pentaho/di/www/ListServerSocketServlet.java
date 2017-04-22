@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2013 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -22,18 +22,17 @@
 
 package org.pentaho.di.www;
 
+import org.owasp.encoder.Encode;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.owasp.esapi.ESAPI;
-import org.owasp.esapi.Encoder;
 
 public class ListServerSocketServlet extends BaseHttpServlet implements CartePluginInterface {
   private static final long serialVersionUID = 3634806745372015720L;
@@ -176,22 +175,20 @@ public class ListServerSocketServlet extends BaseHttpServlet implements CartePlu
     response.setContentType( "text/html" );
     PrintStream out = new PrintStream( response.getOutputStream() );
 
-    Encoder encoder = ESAPI.encoder();
-
     out.println( "<HTML>" );
-    out.println( "<HEAD><TITLE>List of server sockets on server '"
-      + encoder.encodeForHTML( hostname ) + "'</TITLE></HEAD>" );
+    out.println( "<HEAD><TITLE>List of server sockets on server "
+      + Encode.forHtml( "\'" + hostname + "\'" ) + "</TITLE></HEAD>" );
     out.println( "<BODY>" );
-    out.println( "<H1>Ports for host '" + encoder.encodeForHTML( hostname ) + "'</H1>" );
+    out.println( "<H1>Ports for host " + Encode.forHtml( "\'" + hostname + "\'" ) + "</H1>" );
 
-    Map<String, List<SocketPortAllocation>> portsMap = getTransformationMap().getHostServerSocketPortsMap();
-    List<SocketPortAllocation> allocations = portsMap.get( hostname );
+    List<SocketPortAllocation> allocations = getTransformationMap().getHostServerSocketPorts( hostname );
+
     if ( allocations == null ) {
-      out.println( "No port allocations found for host '" + encoder.encodeForHTML( hostname ) + "'" );
+      out.println( "No port allocations found for host " + Encode.forHtml( "\'" + hostname + "\'" ) );
       return;
     }
 
-    out.println( "Found " + allocations.size() + " ports for host '" + encoder.encodeForHTML( hostname ) + "'<p>" );
+    out.println( "Found " + allocations.size() + " ports for host " + Encode.forHtml( "\'" + hostname + "\'" ) + "<p>" );
 
     Iterator<SocketPortAllocation> iterator = allocations.iterator();
     while ( iterator.hasNext() ) {

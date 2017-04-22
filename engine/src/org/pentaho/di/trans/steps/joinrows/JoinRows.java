@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -109,7 +109,11 @@ public class JoinRows extends BaseStep implements StepInterface {
 
       for ( int i = 1; i < getInputRowSets().size(); i++ ) {
         String directoryName = environmentSubstitute( meta.getDirectory() );
-        data.file[i] = File.createTempFile( meta.getPrefix(), ".tmp", new File( directoryName ) );
+        File file = null;
+        if ( directoryName != null ) {
+          file = new File( directoryName );
+        }
+        data.file[i] = File.createTempFile( meta.getPrefix(), ".tmp", file );
 
         data.size[i] = 0;
         data.rs[i] = getInputRowSets().get( i );
@@ -153,7 +157,7 @@ public class JoinRows extends BaseStep implements StepInterface {
 
       if ( log.isRowLevel() ) {
         logRowlevel( BaseMessages.getString( PKG, "JoinRows.Log.ReadRowFromStream" )
-          + ( rowData == null ? "<null>" : rowData.toString() ) );
+          + ( rowData == null ? "<null>" : data.fileRowMeta[0].getString( rowData ) ) );
       }
     } else {
       if ( data.cache[filenr] == null ) {
@@ -198,7 +202,7 @@ public class JoinRows extends BaseStep implements StepInterface {
         }
         if ( log.isRowLevel() ) {
           logRowlevel( BaseMessages.getString( PKG, "JoinRows.Log.ReadRowFromFile" )
-            + filenr + " : " + getInputRowMeta().getString( rowData ) );
+            + filenr + " : " + data.fileRowMeta[filenr].getString( rowData ) );
         }
 
         data.position[filenr]++;
@@ -388,7 +392,8 @@ public class JoinRows extends BaseStep implements StepInterface {
       data.size[data.filenr]++;
 
       if ( log.isRowLevel() ) {
-        logRowlevel( rowData.toString() );
+        logRowlevel( BaseMessages.getString( PKG, "JoinRows.Log.ReadRowFromStreamN", data.filenr,
+          data.fileRowMeta[data.filenr].getString( rowData ) ) );
       }
 
       //
@@ -434,7 +439,7 @@ public class JoinRows extends BaseStep implements StepInterface {
   private RowMetaInterface createOutputRowMeta( RowMetaInterface[] fileRowMeta ) {
     RowMetaInterface outputRowMeta = new RowMeta();
     for ( int i = 0; i < data.fileRowMeta.length; i++ ) {
-      outputRowMeta.mergeRowMeta( data.fileRowMeta[i] );
+      outputRowMeta.mergeRowMeta( data.fileRowMeta[i], meta.getName() );
     }
     return outputRowMeta;
   }
@@ -446,7 +451,9 @@ public class JoinRows extends BaseStep implements StepInterface {
     // Remove the temporary files...
     if ( data.file != null ) {
       for ( int i = 1; i < data.file.length; i++ ) {
-        data.file[i].delete();
+        if ( data.file[i] != null ) {
+          data.file[i].delete();
+        }
       }
     }
 

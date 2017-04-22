@@ -3,7 +3,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -485,6 +485,17 @@ public class Const {
     Const.INTERNAL_VARIABLE_JOB_NAME, Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY,
     Const.INTERNAL_VARIABLE_JOB_RUN_ID, Const.INTERNAL_VARIABLE_JOB_RUN_ATTEMPTNR, };
 
+  /*
+   * Deprecated variables array.
+   * Variables in this array will display with the prefix (deprecated) and will be moved
+   * at the bottom of the variables dropdown when pressing ctrl+space
+   * */
+  public static final String[] DEPRECATED_VARIABLES = new String[] {
+    Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY,
+    Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_NAME, Const.INTERNAL_VARIABLE_TRANSFORMATION_NAME,
+    Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY
+  };
+
   /** The transformation filename directory */
   public static final String INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY = INTERNAL_VARIABLE_PREFIX
     + ".Transformation.Filename.Directory";
@@ -738,6 +749,11 @@ public class Const {
   public static final String KETTLE_COMPATIBILITY_IMPORT_PATH_ADDITION_ON_VARIABLES = "KETTLE_COMPATIBILITY_IMPORT_PATH_ADDITION_ON_VARIABLES";
 
   /**
+   * System wide flag to ignore logging table. See BACKLOG-15706 for details.
+   */
+  public static final String KETTLE_COMPATIBILITY_IGNORE_TABLE_LOGGING = "KETTLE_COMPATIBILITY_IGNORE_TABLE_LOGGING";
+
+  /**
    * System wide flag to set or not append and header options dependency on Text file output step. See PDI-5252 for
    * details.
    */
@@ -816,6 +832,16 @@ public class Const {
    * A variable to configure the maximum number of logging registry entries kept in memory for logging purposes.
    */
   public static final String KETTLE_MAX_LOGGING_REGISTRY_SIZE = "KETTLE_MAX_LOGGING_REGISTRY_SIZE";
+
+  /**
+   * A variable to configure the kettle log tab refresh delay.
+   */
+  public static final String KETTLE_LOG_TAB_REFRESH_DELAY = "KETTLE_LOG_TAB_REFRESH_DELAY";
+
+  /**
+   * A variable to configure the kettle log tab refresh period.
+   */
+  public static final String KETTLE_LOG_TAB_REFRESH_PERIOD = "KETTLE_LOG_TAB_REFRESH_PERIOD";
 
   /**
    * The name of the system wide variable that can contain the name of the SAP Connection factory for the test button in
@@ -986,6 +1012,11 @@ public class Const {
   public static final String XML_FILE_KETTLE_LIFECYCLE_LISTENERS = "kettle-lifecycle-listeners.xml";
 
   /**
+   * The XML file that contains the list of native engines
+   */
+  public static final String XML_FILE_KETTLE_ENGINES = "kettle-engines.xml";
+
+  /**
    * the value the Pan JVM should return on exit.
    */
   public static final String KETTLE_TRANS_PAN_JVM_EXIT_CODE = "KETTLE_TRANS_PAN_JVM_EXIT_CODE";
@@ -1025,6 +1056,12 @@ public class Const {
   public static final String KETTLE_SPLIT_FIELDS_REMOVE_ENCLOSURE = "KETTLE_SPLIT_FIELDS_REMOVE_ENCLOSURE";
 
   /**
+   * Set this variable to false to preserve global log variables defined in transformation / job Properties -> Log panel.
+   * Changing it to true will clear all global log variables when export transformation / job
+   */
+  public static final String KETTLE_GLOBAL_LOG_VARIABLES_CLEAR_ON_EXPORT = "KETTLE_GLOBAL_LOG_VARIABLES_CLEAR_ON_EXPORT";
+
+  /**
    * Compatibility settings for {@link org.pentaho.di.core.row.ValueDataUtil#hourOfDay(ValueMetaInterface, Object)}.
    *
    * Switches off the fix for calculation of timezone decomposition.
@@ -1038,6 +1075,9 @@ public class Const {
   // see PDI-10270 for details.
   public static final String KETTLE_COMPATIBILITY_SET_ERROR_ON_SPECIFIC_JOB_ENTRIES =
     "KETTLE_COMPATIBILITY_SET_ERROR_ON_SPECIFIC_JOB_ENTRIES";
+
+  // See PDI-15781 for details
+  public static final String KETTLE_COMPATIBILITY_SEND_RESULT_XML_WITH_FULL_STATUS = "KETTLE_COMPATIBILITY_SEND_RESULT_XML_WITH_FULL_STATUS";
 
   /**
    * The XML file that contains the list of native import rules
@@ -3460,5 +3500,9 @@ public class Const {
       return false;
     }
     return clazz.equals( superClass ) || classIsOrExtends( clazz.getSuperclass(), superClass );
+  }
+
+  public static String getDeprecatedPrefix() {
+    return " " + BaseMessages.getString( PKG, "Const.Deprecated" );
   }
 }

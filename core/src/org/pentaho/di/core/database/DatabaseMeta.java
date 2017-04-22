@@ -3,7 +3,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -522,21 +522,7 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    *
    */
   public void addOptions() {
-    PluginInterface mySqlPlugin = PluginRegistry.getInstance().getPlugin( DatabasePluginType.class, "MYSQL" );
-    PluginInterface infoBrightPlugin =
-      PluginRegistry.getInstance().getPlugin( DatabasePluginType.class, new InfobrightDatabaseMeta() );
-
-    String mySQL = mySqlPlugin.getIds()[0];
-
-    addExtraOption( mySQL, "defaultFetchSize", "500" );
-    addExtraOption( mySQL, "useCursorFetch", "true" );
-
-    String infoBright = infoBrightPlugin.getIds()[0];
-
-    addExtraOption( infoBright, "characterEncoding", "UTF-8" );
-
-    // Modern databases support this, try it by default...
-    //
+    databaseInterface.addDefaultOptions();
     setSupportsBooleanDataType( true );
     setSupportsTimestampDataType( true );
   }
@@ -1579,18 +1565,18 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     ArrayList<String> remarks = new ArrayList<String>();
 
     if ( getDatabaseInterface() == null ) {
-      remarks.add( "No database type was choosen" );
+      remarks.add( BaseMessages.getString( PKG, "DatabaseMeta.BadInterface" ) );
     }
 
     if ( getName() == null || getName().length() == 0 ) {
-      remarks.add( "Please give this database connection a name" );
+      remarks.add( BaseMessages.getString( PKG, "DatabaseMeta.BadConnectionName" ) );
     }
 
     if ( !isPartitioned()
       && ( ( (BaseDatabaseMeta) getDatabaseInterface() ).requiresName()
       && !( getDatabaseInterface() instanceof GenericDatabaseMeta ) ) ) {
       if ( getDatabaseName() == null || getDatabaseName().length() == 0 ) {
-        remarks.add( "Please specify the name of the database" );
+        remarks.add( BaseMessages.getString( PKG, "DatabaseMeta.BadDatabaseName" ) );
       }
     }
 
@@ -2748,7 +2734,7 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     // This is also covered/persisted by JDBC option MS SQL Server / instancename / <somevalue>
     // We want to return <somevalue>
     // --> MSSQL.instancename
-    return getExtraOptions().get( "MSSQL.instance" );
+    return getExtraOptions().get( getPluginId() + ".instance" );
   }
 
   /**
@@ -2759,7 +2745,9 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     // This is also covered/persisted by JDBC option MS SQL Server / instancename / <somevalue>
     // We want to return set <somevalue>
     // --> MSSQL.instancename
-    addExtraOption( "MSSQL", "instance", instanceName );
+    if ( ( instanceName != null ) && ( instanceName.length() > 0 ) ) {
+      addExtraOption( getPluginId(), "instance", instanceName );
+    }
   }
 
   /**

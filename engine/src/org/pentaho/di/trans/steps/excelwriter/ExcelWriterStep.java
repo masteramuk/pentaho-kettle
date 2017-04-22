@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -824,8 +824,9 @@ public class ExcelWriterStep extends BaseStep implements StepInterface {
 
       // Find last row and append accordingly
       if ( !data.createNewSheet && meta.isAppendLines() && appendingToSheet ) {
-        data.posY = data.sheet.getLastRowNum();
-        if ( data.posY > 0 ) {
+        data.posY = 0;
+        if ( data.sheet.getPhysicalNumberOfRows() > 0 ) {
+          data.posY = data.sheet.getLastRowNum();
           data.posY++;
         }
       }
@@ -932,7 +933,7 @@ public class ExcelWriterStep extends BaseStep implements StepInterface {
       data.realTemplateSheetName = environmentSubstitute( meta.getTemplateSheetName() );
       data.realTemplateFileName = environmentSubstitute( meta.getTemplateFileName() );
       data.realStartingCell = environmentSubstitute( meta.getStartingCell() );
-      data.realPassword = environmentSubstitute( meta.getPassword() );
+      data.realPassword = Utils.resolvePassword( variables, meta.getPassword() );
       data.realProtectedBy = environmentSubstitute( meta.getProtectedBy() );
 
       data.shiftExistingCells = ExcelWriterStepMeta.ROW_WRITE_PUSH_DOWN.equals( meta.getRowWritingMethod() );

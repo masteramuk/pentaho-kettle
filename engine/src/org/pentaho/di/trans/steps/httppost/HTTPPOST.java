@@ -2,7 +2,7 @@
  *
  * Pentaho Data Integration
  *
- * Copyright (C) 2002-2016 by Pentaho : http://www.pentaho.com
+ * Copyright (C) 2002-2017 by Pentaho : http://www.pentaho.com
  *
  *******************************************************************************
  *
@@ -22,14 +22,18 @@
 
 package org.pentaho.di.trans.steps.httppost;
 
-import java.io.IOException;
+
+
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
-
-
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.commons.httpclient.Credentials;
 import org.apache.commons.httpclient.Header;
@@ -40,6 +44,7 @@ import org.apache.commons.httpclient.UsernamePasswordCredentials;
 import org.apache.commons.httpclient.auth.AuthScope;
 import org.apache.commons.httpclient.methods.InputStreamRequestEntity;
 import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.commons.httpclient.methods.StringRequestEntity;
 import org.json.simple.JSONObject;
 import org.pentaho.di.cluster.SlaveConnectionManager;
 import org.pentaho.di.core.Const;
@@ -156,7 +161,8 @@ public class HTTPPOST extends BaseStep implements StepInterface {
                 data.inputRowMeta.getString( rowData, data.body_parameters_nrs[i] ) ) );
           }
         }
-        post.setRequestBody( data.bodyParameters );
+        String bodyParams = getRequestBodyParamsAsStr( data.bodyParameters, data.realEncoding );
+        post.setRequestEntity( new StringRequestEntity( bodyParams, CONTENT_TYPE_TEXT_XML, "US-ASCII" ) );
       }
 
       // QUERY PARAMETERS
@@ -186,13 +192,13 @@ public class HTTPPOST extends BaseStep implements StepInterface {
           fis = new FileInputStream( input );
           post.setRequestEntity( new InputStreamRequestEntity( fis, input.length() ) );
         } else {
+          byte[] bytes;
           if ( ( data.realEncoding != null ) && ( data.realEncoding.length() > 0 ) ) {
-            post.setRequestEntity( new InputStreamRequestEntity( new ByteArrayInputStream( tmp
-                .getBytes( data.realEncoding ) ), tmp.length() ) );
+            bytes = tmp.getBytes( data.realEncoding );
           } else {
-            post.setRequestEntity( new InputStreamRequestEntity( new ByteArrayInputStream( tmp.getBytes() ), tmp
-                .length() ) );
+            bytes = tmp.getBytes();
           }
+          post.setRequestEntity( new InputStreamRequestEntity( new ByteArrayInputStream( bytes ), bytes.length ) );
         }
       }
 
@@ -245,7 +251,18 @@ public class HTTPPOST extends BaseStep implements StepInterface {
               }
               JSONObject json = new JSONObject();
               for ( Header header : headers ) {
-                json.put( header.getName(), header.getValue() );
+                Object previousValue = json.get( header.getName() );
+                if ( previousValue == null ) {
+                  json.put( header.getName(), header.getValue() );
+                } else if ( previousValue instanceof List ) {
+                  List<String> list = (List<String>) previousValue;
+                  list.add( header.getValue() );
+                } else {
+                  ArrayList<String> list = new ArrayList<String>();
+                  list.add( (String) previousValue );
+                  list.add( (String) header.getValue() );
+                  json.put( header.getName(), list );
+                }
               }
               headerString = json.toJSONString();
 
@@ -286,9 +303,10 @@ public class HTTPPOST extends BaseStep implements StepInterface {
         }
         if ( !Utils.isEmpty( meta.getResponseTimeFieldName() ) ) {
           newRow = RowDataUtil.addValueData( newRow, returnFieldsOffset, new Long( responseTime ) );
+          returnFieldsOffset++;
         }
         if ( !Utils.isEmpty( meta.getResponseHeaderFieldName() ) ) {
-          newRow = RowDataUtil.addValueData( newRow, returnFieldsOffset, headerString.toString() );
+          newRow = RowDataUtil.addValueData( newRow, returnFieldsOffset, headerString );
         }
       } finally {
         if ( inputStreamReader != null ) {
@@ -485,6 +503,29 @@ public class HTTPPOST extends BaseStep implements StepInterface {
     return true;
   }
 
+  private String getRequestBodyParamsAsStr( NameValuePair[] pairs, String charset ) throws KettleException {
+    StringBuffer buf = new StringBuffer();
+    try {
+      for ( int i = 0; i < pairs.length; ++i ) {
+        NameValuePair pair = pairs[i];
+        if ( pair.getName() != null ) {
+          if ( i > 0 ) {
+            buf.append( "&" );
+          }
+
+          buf.append( URLEncoder.encode( pair.getName(), charset ) );
+          buf.append( "=" );
+          if ( pair.getValue() != null ) {
+            buf.append( URLEncoder.encode( pair.getValue(), charset ) );
+          }
+        }
+      }
+      return buf.toString();
+    } catch ( UnsupportedEncodingException e ) {
+      throw new KettleException( e.getMessage(), e.getCause() );
+    }
+  }
+
   public boolean init( StepMetaInterface smi, StepDataInterface sdi ) {
     meta = (HTTPPOSTMeta) smi;
     data = (HTTPPOSTData) sdi;
@@ -494,7 +535,7 @@ public class HTTPPOST extends BaseStep implements StepInterface {
       data.realProxyHost = environmentSubstitute( meta.getProxyHost() );
       data.realProxyPort = Const.toInt( environmentSubstitute( meta.getProxyPort() ), 8080 );
       data.realHttpLogin = environmentSubstitute( meta.getHttpLogin() );
-      data.realHttpPassword = environmentSubstitute( meta.getHttpPassword() );
+      data.realHttpPassword = Utils.resolvePassword( variables, meta.getHttpPassword() );
 
       data.realSocketTimeout = Const.toInt( environmentSubstitute( meta.getSocketTimeout() ), -1 );
       data.realConnectionTimeout = Const.toInt( environmentSubstitute( meta.getSocketTimeout() ), -1 );
